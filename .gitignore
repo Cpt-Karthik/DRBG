@@ -206,3 +206,9 @@ CTestTestfile.cmake
 _deps
 
 ./.idea/**
+/.idea/misc.xml
+/.idea/.gitignore
+/.idea/.name
+/.idea/modules.xml
+/.idea/untitled.iml
+/.idea/vcs.xml
