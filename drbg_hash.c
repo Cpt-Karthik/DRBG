@@ -73,8 +73,9 @@ bool DRBG_HASH_instantiate(DRBG_HASH *drbg,
     uint32_t mat_length = entropy_length + nonce_length + pstr_length;
     uint8_t seed_mat[mat_length];
     memcpy(seed_mat, entropy, entropy_length);
-    memcpy(seed_mat, nonce, nonce_length);
-    memcpy(seed_mat, pstr, pstr_length);
+    memcpy(&seed_mat[entropy_length], nonce, nonce_length);
+    memcpy(&seed_mat[entropy_length + nonce_length], pstr, pstr_length);
+//    DRBG_mem_count_add("instantiate", 4 + mat_length);
 
     // V = Hash_df(seed_material, seed_len)
     hash_df(drbg->conf,
