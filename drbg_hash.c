@@ -14,9 +14,9 @@ bool hash_df(DRBG_HASH_CONF *conf,
 
     // since round is calculated to make output full of data returned
     // we directly calculate remaining bytes to fill up output
+    uint8_t to_hash[1 + 4 + input_length];
     for (uint32_t remain = return_length;; remain -= conf->out_len) {
 
-        uint8_t to_hash[1 + 4 + input_length];
         to_hash[0] = ++counter;
         to_hash[1] = (uint8_t) ((input_length >> 24u) & 0xffu);
         to_hash[2] = (uint8_t) ((input_length >> 16u) & 0xffu);
