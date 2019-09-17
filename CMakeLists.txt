@@ -37,3 +37,13 @@ add_executable(drbg_hmac
         ${COMMON_FILES})
 
 target_link_libraries(drbg_hmac ${OPENSSL_LIBRARIES})
+
+add_executable(drbg_ctr
+        main_ctr.c
+        include/drbg_ctr.h
+        drbg_ctr.c
+        include/cipher/aes256_ctr.h
+        cipher/aes256_ctr.c
+        ${COMMON_FILES})
+
+target_link_libraries(drbg_ctr ${OPENSSL_LIBRARIES})
