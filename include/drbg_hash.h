@@ -22,7 +22,7 @@ typedef struct {
 
     /* hash function used in instantiate, reseed and generate */
     // input might be null, so be ware that you need to check null yourself
-    uint32_t (*hash)(const uint8_t *input1, uint32_t input1_len, const uint8_t *input2,
+    bool (*hash)(const uint8_t *input1, uint32_t input1_len, const uint8_t *input2,
             uint32_t input2_len, const uint8_t *input3, uint32_t input3_len,
             const uint8_t *input4, uint32_t input4_len, uint8_t *output);
 
