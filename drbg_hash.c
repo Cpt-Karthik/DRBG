@@ -5,31 +5,34 @@
 #include "include/drbg_hash.h"
 
 bool hash_df(DRBG_HASH_CONF *conf,
-             const uint8_t *input, uint32_t input_length,
+             const uint8_t *input1, uint32_t input1_length,
+             const uint8_t *input2, uint32_t input2_length,
+             const uint8_t *input3, uint32_t input3_length,
              uint8_t *output, uint32_t return_length) {
 
-    uint8_t counter = 0;
     uint8_t temp[conf->out_len];
+    uint32_t input_length = input1_length + input2_length + input3_length;
     // for every round, hash function output outlen bytes data
 
     // since round is calculated to make output full of data returned
     // we directly calculate remaining bytes to fill up output
-    uint8_t to_hash[1 + 4 + input_length];
+    uint8_t to_hash[1 + 4];
+    to_hash[0] = 0;
+    to_hash[1] = (uint8_t) ((input_length >> 24u) & 0xffu);
+    to_hash[2] = (uint8_t) ((input_length >> 16u) & 0xffu);
+    to_hash[3] = (uint8_t) ((input_length >> 8u) & 0xffu);
+    to_hash[4] = (uint8_t) (input_length & 0xffu);
+
     for (uint32_t remain = return_length;; remain -= conf->out_len) {
 
-        to_hash[0] = ++counter;
-        to_hash[1] = (uint8_t) ((input_length >> 24u) & 0xffu);
-        to_hash[2] = (uint8_t) ((input_length >> 16u) & 0xffu);
-        to_hash[3] = (uint8_t) ((input_length >> 8u) & 0xffu);
-        to_hash[4] = (uint8_t) (input_length & 0xffu);
-        memcpy(&to_hash[5], input, input_length);
+        to_hash[0]++;
 
-        uint32_t len =
-                conf->hash(to_hash, 1 + 4 + input_length, temp);
-        if (len == 0) return false;
+        if (!conf->hash(to_hash, 1 + 4, input1, input1_length,
+                input2, input2_length, input3, input3_length, temp)) return false;
 
         // use the smaller one size, hash outputs up to hash_size length
-        if (remain > len) memcpy(&output[return_length - remain], temp, len);
+        if (remain > conf->out_len)
+            memcpy(&output[return_length - remain], temp, conf->out_len);
         else {
             // output remains less than out_len, which reaches final block
             memcpy(&output[return_length - remain], temp, remain);
@@ -46,8 +49,7 @@ bool DRBG_HASH_new(DRBG_HASH *drbg, DRBG_HASH_CONF *conf) {
     if (conf == NULL || conf->hash == NULL ||
         conf->seed_len == 0 ||
         conf->out_len == 0 ||
-        conf->reseed_interval == 0 ||
-        conf->security_strength == 0)
+        conf->reseed_interval == 0)
         return false;
 
     drbg->conf = conf;
@@ -70,24 +72,15 @@ bool DRBG_HASH_instantiate(DRBG_HASH *drbg,
                            const uint8_t *pstr, uint32_t pstr_length) {
 
     // seed_material = entropy_input || nonce || personalization_string
-    uint32_t mat_length = entropy_length + nonce_length + pstr_length;
-    uint8_t seed_mat[mat_length];
-    memcpy(seed_mat, entropy, entropy_length);
-    memcpy(&seed_mat[entropy_length], nonce, nonce_length);
-    memcpy(&seed_mat[entropy_length + nonce_length], pstr, pstr_length);
-//    DRBG_mem_count_add("instantiate", 4 + mat_length);
-
     // V = Hash_df(seed_material, seed_len)
     hash_df(drbg->conf,
-            seed_mat, mat_length,
+            entropy, entropy_length, nonce, nonce_length, pstr, pstr_length,
             drbg->V, drbg->conf->seed_len);
 
     // C = Hash_df(0x00||V, seed_len)
-    uint8_t ctmp[1 + drbg->conf->seed_len];
-    ctmp[0] = 0x00;
-    memcpy(&ctmp[1], drbg->V, drbg->conf->seed_len);
-    hash_df(drbg->conf,
-            ctmp, 1 + drbg->conf->seed_len,
+    uint8_t zero = 0x00;
+    hash_df(drbg->conf, &zero, 1, drbg->V, drbg->conf->seed_len,
+            NULL, 0,
             drbg->C, drbg->conf->seed_len);
 
     drbg->reseed_counter = 1;
@@ -100,24 +93,16 @@ bool DRBG_HASH_reseed(DRBG_HASH *drbg,
                       uint8_t *add_input, uint32_t add_length) {
 
     // seed_material = 0x01 || V || entropy_input || additional_input
-    uint32_t mat_length = 1 + drbg->conf->seed_len + entropy_length + add_length;
-    uint8_t seed_mat[mat_length];
-    seed_mat[0] = 0x01;
-    memcpy(&seed_mat[1], drbg->V, drbg->conf->seed_len);
-    memcpy(&seed_mat[1 + drbg->conf->seed_len], entropy, entropy_length);
-    memcpy(&seed_mat[1 + drbg->conf->seed_len + entropy_length], add_input, add_length);
-
     // V = Hash_df(seed_material, seed_len)
+    uint8_t one = 0x01;
     hash_df(drbg->conf,
-            seed_mat, mat_length,
+            &one, 1, entropy, entropy_length, add_input, add_length,
             drbg->V, drbg->conf->seed_len);
 
     // C = Hash_df(0x00||V, seed_len)
-    uint8_t ctmp[1 + drbg->conf->seed_len];
-    ctmp[0] = 0x00;
-    memcpy(&ctmp[1], drbg->V, drbg->conf->seed_len);
-    hash_df(drbg->conf,
-            ctmp, 1 + drbg->conf->seed_len,
+    uint8_t zero = 0x00;
+    hash_df(drbg->conf, &zero, 1, drbg->V, drbg->conf->seed_len,
+            NULL, 0,
             drbg->C, drbg->conf->seed_len);
 
     drbg->reseed_counter = 1;
@@ -166,7 +151,7 @@ bool hashgen(DRBG_HASH *drbg, uint32_t return_length, uint8_t *output) {
     for (uint32_t remain = return_length;; remain -= drbg->conf->out_len) {
 
         // W = W || hash(data), till full of return length long bytes
-        uint32_t len = drbg->conf->hash(data, drbg->conf->seed_len, tmp);
+        uint32_t len = drbg->conf->hash(data, drbg->conf->seed_len, NULL, 0, NULL, 0, NULL, 0, tmp);
         if (len == 0) return false;
 
         // use the smaller one size, hash outputs up to hash_size length
@@ -192,14 +177,9 @@ bool DRBG_HASH_generate(DRBG_HASH *drbg,
     if (add_input == NULL) {
 
         // w = hash(0x02||V||additional_input)
-        uint32_t tmp_len = 1 + drbg->conf->seed_len + add_length;
-        uint8_t tmp[tmp_len];
         uint8_t w[drbg->conf->out_len];
-
-        tmp[0] = 0x02;
-        memcpy(&tmp[1], drbg->V, drbg->conf->seed_len);
-        memcpy(&tmp[1 + drbg->conf->seed_len], add_input, add_length);
-        uint32_t len = drbg->conf->hash(tmp, tmp_len, w);
+        uint8_t two = 0x02;
+        uint32_t len = drbg->conf->hash(&two, 1, drbg->V, drbg->conf->seed_len, add_input, add_length, NULL, 0, w);
         if (len == 0) return false;
 
         // V = (V + w) mod 2^seed_len
@@ -213,7 +193,9 @@ bool DRBG_HASH_generate(DRBG_HASH *drbg,
     uint8_t H[drbg->conf->out_len];
     htmp[0] = 0x03;
     memcpy(&htmp[1], drbg->V, drbg->conf->seed_len);
-    uint32_t len = drbg->conf->hash(htmp, 1 + drbg->conf->seed_len, H);
+
+    uint8_t three = 0x03;
+    uint32_t len = drbg->conf->hash(&three, 1, drbg->V, drbg->conf->seed_len, NULL, 0, NULL, 0, H);
     if (len == 0) return false;
 
     // V = (V + H + C + reseed_counter) mod 2^seed_len
