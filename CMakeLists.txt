@@ -20,7 +20,7 @@ add_executable(drbg_hash
         test/timer_util.c
         include/test/timer_util.h
         hash/sha256_hash.c
-        include/hash/sha256_hash.h common/random_source.c)
+        include/hash/sha256_hash.h common/random_source.c include/hmac/sha256_hmac.h)
 
 target_link_libraries(drbg_hash ${OPENSSL_LIBRARIES})
 
@@ -31,7 +31,9 @@ add_executable(drbg_hmac
         include/bool.h
         test/timer_util.c
         include/test/timer_util.h
-        hash/sha256_hash.c
-        include/hash/sha256_hash.h main_hmac.c common/random_source.c)
+        main_hmac.c
+        common/random_source.c
+        hmac/sha256_hmac.c
+        include/hmac/sha256_hmac.h)
 
-target_link_libraries(drbg_hash ${OPENSSL_LIBRARIES})
+target_link_libraries(drbg_hmac ${OPENSSL_LIBRARIES})
