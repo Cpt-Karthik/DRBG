@@ -4,16 +4,6 @@
 #include "include/random_source.h"
 #include <stdio.h>
 
-#if defined(__APPLE__)
-
-#include <sys/random.h>
-
-#elif defined(_Win32)
-// Windows entropy random source header
-#else
-// Linux entropy random source header
-#endif
-
 #define DRBG_LEN 32
 #define ENTROPY_LEN 32
 
