@@ -151,11 +151,10 @@ bool hashgen(DRBG_HASH *drbg, uint32_t return_length, uint8_t *output) {
     for (uint32_t remain = return_length;; remain -= drbg->conf->out_len) {
 
         // W = W || hash(data), till full of return length long bytes
-        uint32_t len = drbg->conf->hash(data, drbg->conf->seed_len, NULL, 0, NULL, 0, NULL, 0, tmp);
-        if (len == 0) return false;
+        if (!drbg->conf->hash(data, drbg->conf->seed_len, NULL, 0, NULL, 0, NULL, 0, tmp)) return false;
 
         // use the smaller one size, hash outputs up to hash_size length
-        if (remain > len) memcpy(&output[return_length - remain], tmp, len);
+        if (remain > drbg->conf->out_len) memcpy(&output[return_length - remain], tmp, drbg->conf->out_len);
         else {
             // output remains less than out_len, which reaches final block
             memcpy(&output[return_length - remain], tmp, remain);
@@ -195,8 +194,7 @@ bool DRBG_HASH_generate(DRBG_HASH *drbg,
     memcpy(&htmp[1], drbg->V, drbg->conf->seed_len);
 
     uint8_t three = 0x03;
-    uint32_t len = drbg->conf->hash(&three, 1, drbg->V, drbg->conf->seed_len, NULL, 0, NULL, 0, H);
-    if (len == 0) return false;
+    if (!drbg->conf->hash(&three, 1, drbg->V, drbg->conf->seed_len, NULL, 0, NULL, 0, H)) return false;
 
     // V = (V + H + C + reseed_counter) mod 2^seed_len
     add_bytes(drbg, drbg->V, H, drbg->conf->out_len);
