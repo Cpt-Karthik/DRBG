@@ -41,7 +41,7 @@ int main() {
     print_time(5);
     uint8_t res[DRBG_LEN];
     for (int j = 0; j < 10; ++j) {
-        if (!DRBG_HASH_generate(&drbg, serial, 16, DRBG_LEN, res)) {
+        if (!DRBG_HASH_generate(&drbg, serial, 16, res, DRBG_LEN)) {
             printf("Gen err");
             return 4;
         } else {
@@ -67,7 +67,7 @@ int main() {
 
     print_time(8);
     for (int j = 0; j < 10; ++j) {
-        if (!DRBG_HASH_generate(&drbg, serial, 16, DRBG_LEN, res)) {
+        if (!DRBG_HASH_generate(&drbg, serial, 16, res, DRBG_LEN)) {
             printf("Gen err after reseed");
             return 6;
         } else {

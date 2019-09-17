@@ -97,7 +97,7 @@ bool DRBG_HMAC_reseed(DRBG_HMAC *,
  */
 bool DRBG_HMAC_generate(DRBG_HMAC *,
                         const uint8_t *add_input, uint32_t add_length,
-                        uint32_t return_length, uint8_t *output);
+                        uint8_t *output, uint32_t return_length);
 
 bool DRBG_HMAC_uninstantiate(DRBG_HMAC *);
 

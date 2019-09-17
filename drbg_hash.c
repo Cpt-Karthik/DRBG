@@ -110,16 +110,16 @@ bool DRBG_HASH_reseed(DRBG_HASH *drbg,
 }
 
 // modify from openssl/crypto/rand/drbg_hash.c
-static bool add_bytes(DRBG_HASH *drbg, uint8_t *dst,
+static bool add(uint8_t *dst, uint32_t dst_len,
                const uint8_t *in, uint32_t inlen) {
     uint32_t i;
     uint32_t result;
     const uint8_t *add;
     uint8_t carry = 0, *d;
 
-    if (!(drbg->conf->seed_len >= 1 && inlen >= 1 && inlen <= drbg->conf->seed_len)) return false;
+    if (!(dst_len >= 1 && inlen >= 1 && inlen <= dst_len)) return false;
 
-    d = &dst[drbg->conf->seed_len - 1];
+    d = &dst[dst_len - 1];
     add = &in[inlen - 1];
 
     for (i = inlen; i > 0; i--, d--, add--) {
@@ -130,7 +130,7 @@ static bool add_bytes(DRBG_HASH *drbg, uint8_t *dst,
 
     if (carry != 0) {
         /* Add the carry to the top of the dst if inlen is not the same size */
-        for (i = drbg->conf->seed_len - inlen; i > 0; --i, d--) {
+        for (i = dst_len - inlen; i > 0; --i, d--) {
             *d += 1;     /* Carry can only be 1 */
             if (*d != 0) /* exit if carry doesnt propagate to the next byte */
                 break;
@@ -163,7 +163,7 @@ static bool hashgen(DRBG_HASH *drbg, uint32_t return_length, uint8_t *output) {
 
         // data = (data + 1) mod 2^seed_len
         uint8_t one = 1;
-        add_bytes(drbg, data, &one, 1);
+        add(data, drbg->conf->seed_len, &one, 1);
     }
 
     return true;
@@ -171,7 +171,7 @@ static bool hashgen(DRBG_HASH *drbg, uint32_t return_length, uint8_t *output) {
 
 bool DRBG_HASH_generate(DRBG_HASH *drbg,
                         uint8_t *add_input, uint32_t add_length,
-                        uint32_t req_length, uint8_t *result) {
+                        uint8_t *output, uint32_t return_length) {
 
     if (add_input == NULL) {
 
@@ -182,10 +182,10 @@ bool DRBG_HASH_generate(DRBG_HASH *drbg,
         if (len == 0) return false;
 
         // V = (V + w) mod 2^seed_len
-        add_bytes(drbg, drbg->V, w, drbg->conf->out_len);
+        add(drbg->V, drbg->conf->seed_len, w, drbg->conf->out_len);
     }
 
-    hashgen(drbg, req_length, result);
+    hashgen(drbg, return_length, output);
 
     // H = hash(0x03||V)
     uint8_t htmp[1 + drbg->conf->seed_len];
@@ -197,8 +197,8 @@ bool DRBG_HASH_generate(DRBG_HASH *drbg,
     if (!drbg->conf->hash(&three, 1, drbg->V, drbg->conf->seed_len, NULL, 0, NULL, 0, H)) return false;
 
     // V = (V + H + C + reseed_counter) mod 2^seed_len
-    add_bytes(drbg, drbg->V, H, drbg->conf->out_len);
-    add_bytes(drbg, drbg->V, drbg->C, drbg->conf->seed_len);
+    add(drbg->V, drbg->conf->seed_len, H, drbg->conf->out_len);
+    add(drbg->V, drbg->conf->seed_len, drbg->C, drbg->conf->seed_len);
 
     uint8_t counter[4];
     uint32_t reseed_counter = drbg->reseed_counter;
@@ -207,7 +207,7 @@ bool DRBG_HASH_generate(DRBG_HASH *drbg,
     counter[1] = (uint8_t) ((reseed_counter >> 16u) & 0xffu);
     counter[2] = (uint8_t) ((reseed_counter >> 8u) & 0xffu);
     counter[3] = (uint8_t) (reseed_counter & 0xffu);
-    add_bytes(drbg, drbg->V, counter, 4);
+    add(drbg->V, drbg->conf->seed_len, counter, 4);
 
     drbg->reseed_counter++;
     return true;

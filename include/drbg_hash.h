@@ -94,7 +94,7 @@ bool DRBG_HASH_reseed(DRBG_HASH *,
  */
 bool DRBG_HASH_generate(DRBG_HASH *,
                        uint8_t *add_input, uint32_t add_length,
-                       uint32_t req_length, uint8_t *result);
+                        uint8_t *output, uint32_t return_length);
 
 bool DRBG_HASH_uninstantiate(DRBG_HASH *);
 
