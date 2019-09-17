@@ -1,6 +1,7 @@
 #include "include/drbg_hash.h"
 #include "include/hash/sha256_hash.h"
 #include "include/test/timer_util.h"
+#include "include/random_source.h"
 #include <stdio.h>
 
 #if defined(__APPLE__)
@@ -57,7 +58,7 @@ int main() {
 
     print_time(5);
     uint8_t res[DRBG_LEN];
-    for (int j = 0; j < 1000; ++j) {
+    for (int j = 0; j < 10; ++j) {
         if (!DRBG_HASH_generate(&drbg, serial, 16, DRBG_LEN, res)) {
             printf("Gen err");
             return 4;
@@ -70,15 +71,7 @@ int main() {
     }
 
     print_time(6);
-#if defined(__APPLE__)
-    result = getentropy(ent, ENTROPY_LEN);
-#elif defined(_Win32)
-    // Windows entropy random source func
-    result = getrandom();
-#else
-    // Linux entropy random source func
-    result = getrandom();
-#endif
+    result = Get_Entropy(ENTROPY_LEN, false, ent);
     if (result) {
         printf("System call err2 %d", result);
         return result;
@@ -91,7 +84,7 @@ int main() {
     }
 
     print_time(8);
-    for (int j = 0; j < 1000; ++j) {
+    for (int j = 0; j < 10; ++j) {
         if (!DRBG_HASH_generate(&drbg, serial, 16, DRBG_LEN, res)) {
             printf("Gen err after reseed");
             return 6;
