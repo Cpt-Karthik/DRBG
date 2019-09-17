@@ -4,7 +4,7 @@
 
 #include "include/drbg_hash.h"
 
-bool hash_df(DRBG_HASH_CONF *conf,
+static bool hash_df(DRBG_HASH_CONF *conf,
              const uint8_t *input1, uint32_t input1_length,
              const uint8_t *input2, uint32_t input2_length,
              const uint8_t *input3, uint32_t input3_length,
@@ -110,7 +110,7 @@ bool DRBG_HASH_reseed(DRBG_HASH *drbg,
 }
 
 // modify from openssl/crypto/rand/drbg_hash.c
-bool add_bytes(DRBG_HASH *drbg, uint8_t *dst,
+static bool add_bytes(DRBG_HASH *drbg, uint8_t *dst,
                const uint8_t *in, uint32_t inlen) {
     uint32_t i;
     uint32_t result;
@@ -139,7 +139,7 @@ bool add_bytes(DRBG_HASH *drbg, uint8_t *dst,
     return true;
 }
 
-bool hashgen(DRBG_HASH *drbg, uint32_t return_length, uint8_t *output) {
+static bool hashgen(DRBG_HASH *drbg, uint32_t return_length, uint8_t *output) {
 
     // data = V
     uint8_t data[drbg->conf->seed_len];
