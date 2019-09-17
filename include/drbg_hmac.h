@@ -21,7 +21,13 @@ typedef struct {
     uint32_t security_strength; // in this method its not used
 
     /* hash function used in instantiate, reseed and generate */
-    uint32_t (*hmac)(uint8_t *, uint32_t, uint8_t *, uint32_t , uint8_t *);
+    // same as hash function, you need to check input whether is NULL
+    bool (*hmac)(const uint8_t *input1, uint32_t input1_len,
+                 const uint8_t *input2, uint32_t input2_len,
+                 const uint8_t *input3, uint32_t input3_len,
+                 const uint8_t *input4, uint32_t input4_len,
+                 const uint8_t *input5, uint32_t input5_len,
+                 uint8_t *key, uint32_t key_len, uint8_t *output);
 
 } DRBG_HMAC_CONF;
 
@@ -90,7 +96,7 @@ bool DRBG_HMAC_reseed(DRBG_HMAC *,
  * @return status 0 if success, failed otherwise
  */
 bool DRBG_HMAC_generate(DRBG_HMAC *,
-                        uint8_t *add_input, uint32_t add_length,
+                        const uint8_t *add_input, uint32_t add_length,
                         uint32_t return_length, uint8_t *output);
 
 bool DRBG_HMAC_uninstantiate(DRBG_HMAC *);
