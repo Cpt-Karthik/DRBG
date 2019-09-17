@@ -35,15 +35,7 @@ int main() {
 
     print_time(3);
     uint8_t ent[ENTROPY_LEN];
-#if defined(__APPLE__)
-    int result = getentropy(ent, ENTROPY_LEN);
-#elif defined(_Win32)
-    // Windows entropy random source func
-    int result = getrandom();
-#else
-    // Linux entropy random source func
-    int result = getrandom();
-#endif
+    int result = Get_Entropy(ENTROPY_LEN, false, ent);
     if (result) {
         printf("System call err1 %d", result);
         return result;
