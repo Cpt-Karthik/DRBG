@@ -8,18 +8,6 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-#if defined(__APPLE__)
-
-#include <stdio.h>
-#include <sys/random.h>
-
-#elif defined(_Win32)
-// Windows entropy random source header
-#else
-// Linux entropy random source header
-#include <sys/random.h>
-#endif
-
 /**
  * Get random resource from external DRBGs/NRBGs/physical sources
  *  (in our implementation we use system call to get entropy,
