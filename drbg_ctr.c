@@ -15,7 +15,7 @@ static bool BCC(DRBG_CTR *drbg, const uint8_t *input, uint32_t input_len,
     uint8_t *input_block = malloc(drbg->conf->block_len);
     memset(output, 0x00, drbg->conf->block_len);
 
-    while (1) {
+    while (offset < input_len) {
 
         // input_block = chaining_value ^ block
         for (i = 0; i < drbg->conf->block_len; ++i) {
@@ -23,9 +23,7 @@ static bool BCC(DRBG_CTR *drbg, const uint8_t *input, uint32_t input_len,
 
             // at this time, offset has the maximum value input_len - 1, or the input length IS NOT n*(block_len)
             if (offset >= input_len) {
-                if (i != drbg->conf->block_len - 1) {
-                    ret = false;
-                }
+                ret = false;
                 goto cleanup;
             }
             offset++;
@@ -151,7 +149,7 @@ static bool DRBG_CTR_Update(DRBG_CTR *drbg, const uint8_t *input, uint32_t input
 
     bool ret = true;
     uint32_t temp_len = drbg->conf->block_len +
-                        (drbg->conf->key_len / drbg->conf->block_len) +
+                        (drbg->conf->key_len / drbg->conf->block_len) * drbg->conf->block_len +
                         (drbg->conf->key_len % drbg->conf->block_len == 0 ? 0 : drbg->conf->block_len);
     uint8_t *temp = malloc(temp_len);
     uint32_t offset = 0;
@@ -162,7 +160,7 @@ static bool DRBG_CTR_Update(DRBG_CTR *drbg, const uint8_t *input, uint32_t input
         goto cleanup;
     }
 
-    while (offset <= drbg->conf->block_len + drbg->conf->key_len) {
+    while (offset < drbg->conf->block_len + drbg->conf->key_len) {
         if (drbg->conf->ctr_len < drbg->conf->block_len) {
             ret = add(&drbg->V[drbg->conf->block_len - drbg->conf->ctr_len], drbg->conf->ctr_len, &one, 1);
         } else {
