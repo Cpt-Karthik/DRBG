@@ -2,7 +2,7 @@
 // Created by Ghost on 2019/9/17.
 //
 
-#include "include/drbg_ctr.h"
+#include "drbg_ctr.h"
 
 // inputs with n*block_len and returns output with length block_len
 static bool BCC(DRBG_CTR *drbg, const uint8_t *input, uint32_t input_len,
@@ -10,17 +10,21 @@ static bool BCC(DRBG_CTR *drbg, const uint8_t *input, uint32_t input_len,
 
     // chaining_value = output
     uint32_t offset = 0;
+    uint32_t i;
     uint8_t input_block[drbg->conf->block_len];
     memset(output, 0x00, drbg->conf->block_len);
 
     while (1) {
 
         // input_block = chaining_value ^ block
-        for (uint32_t i = 0; i < drbg->conf->block_len; ++i) {
+        for (i = 0; i < drbg->conf->block_len; ++i) {
             input_block[i] = output[i] ^ input[offset];
 
             // at this time, offset has the maximum value input_len - 1, or the input length IS NOT n*(block_len)
-            if (offset >= input_len) return false;
+            if (offset >= input_len) {
+                if (i == drbg->conf->block_len - 1) return true;
+                else return false;
+            }
             offset++;
         }
 
@@ -31,14 +35,24 @@ static bool BCC(DRBG_CTR *drbg, const uint8_t *input, uint32_t input_len,
 
 static bool Block_Cipher_df(DRBG_CTR *drbg, const uint8_t *input, uint32_t input_len, uint8_t *output, uint32_t output_len) {
 
-    if (output_len > MAXIMUM_REQUESTED_BYTES) return false;
-
+    bool ret = true;
     // make slen = n*block_len
     uint32_t slen = 4 + 4 + input_len + 1;
-    slen += drbg->conf->block_len - slen % drbg->conf->block_len;
+    uint8_t *iv_s, *s;
+    uint8_t k[32] = {0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
+                     0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f};
+    uint8_t *temp = malloc(drbg->conf->key_len + drbg->conf->block_len);
+    uint32_t offset = 0, counter = 0, remain;
+    // key = leftmost(temp, keylen)
+    uint8_t *key = temp;
+    // x = select(temp, keylen + 1, keylen + block_len)
+    uint8_t *x = &temp[drbg->conf->key_len];
 
-    uint8_t iv_s[drbg->conf->block_len + slen];
-    uint8_t *s = &iv_s[drbg->conf->block_len];
+    if (output_len > MAXIMUM_REQUESTED_BYTES) return false;
+
+    slen += drbg->conf->block_len - slen % drbg->conf->block_len;
+    iv_s = malloc(drbg->conf->block_len + slen);
+    s = &iv_s[drbg->conf->block_len];
 
     // L = len(input_string)
     // N = output_len
@@ -55,12 +69,6 @@ static bool Block_Cipher_df(DRBG_CTR *drbg, const uint8_t *input, uint32_t input
     memcpy(&s[8], input, input_len);
     s[8 + input_len] = 0x80;
 
-    uint8_t k[32] = {0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
-                     0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f};
-
-    uint8_t temp[drbg->conf->key_len + drbg->conf->block_len];
-    uint32_t offset = 0;
-    uint32_t counter = 0;
     while (offset < drbg->conf->key_len + drbg->conf->block_len) {
 
         // iv = i || 0x00
@@ -70,24 +78,20 @@ static bool Block_Cipher_df(DRBG_CTR *drbg, const uint8_t *input, uint32_t input
         iv_s[3] = (uint8_t) (counter & 0xffu);
 
         // temp = temp || BCC(K, (iv||s))
-        if (!BCC(drbg, iv_s, drbg->conf->block_len + slen, k, drbg->conf->key_len, &temp[offset]))
-            return false;
+        if ((ret = BCC(drbg, iv_s, drbg->conf->block_len + slen, k, drbg->conf->key_len, &temp[offset])) != true)
+            goto cleanup;
 
         offset += drbg->conf->block_len;
         counter++;
     }
 
-    // key = leftmost(temp, keylen)
-    uint8_t *key = temp;
-    // x = select(temp, keylen + 1, keylen + block_len)
-    uint8_t *x = &temp[drbg->conf->key_len];
-    for (uint32_t remain = output_len;; remain -= drbg->conf->block_len) {
+    for (remain = output_len;; remain -= drbg->conf->block_len) {
 
         // X = Block_Encrypt(K, X), temp = temp || x till full of return length long bytes
-        if (!drbg->conf->encrypt(
+        if ((ret = drbg->conf->encrypt(
                 &temp[drbg->conf->key_len], drbg->conf->block_len,
-                key, drbg->conf->key_len, x))
-            return false;
+                key, drbg->conf->key_len, x)) != true)
+            goto cleanup;
 
         // use the smaller one size, hash outputs up to hash_size length
         if (remain > drbg->conf->block_len) memcpy(&output[output_len - remain], x, drbg->conf->block_len);
@@ -98,7 +102,10 @@ static bool Block_Cipher_df(DRBG_CTR *drbg, const uint8_t *input, uint32_t input
         }
     }
 
-    return true;
+    cleanup:
+    free(temp);
+    free(iv_s);
+    return ret;
 }
 
 // modify from openssl/crypto/rand/drbg_hash.c
@@ -131,28 +138,33 @@ static bool add(uint8_t *dst, uint32_t dst_len,
     return true;
 }
 
-
 static bool DRBG_CTR_Update(DRBG_CTR *drbg, const uint8_t *input, uint32_t input_len) {
 
-    if (input_len < drbg->conf->block_len + drbg->conf->key_len) return false;
-
+    bool ret = true;
     uint32_t temp_len = drbg->conf->block_len +
                         (drbg->conf->key_len / drbg->conf->block_len) +
                         (drbg->conf->key_len % drbg->conf->block_len == 0 ? 0 : drbg->conf->block_len);
-    uint8_t temp[temp_len];
+    uint8_t *temp = malloc(temp_len);
     uint32_t offset = 0;
     uint8_t one = 1;
 
+    if (input_len < drbg->conf->block_len + drbg->conf->key_len) {
+        ret = false;
+        goto cleanup;
+    }
+
     while (offset <= drbg->conf->block_len + drbg->conf->key_len) {
         if (drbg->conf->ctr_len < drbg->conf->block_len) {
-            add(&drbg->V[drbg->conf->block_len - drbg->conf->ctr_len], drbg->conf->ctr_len, &one, 1);
+            ret = add(&drbg->V[drbg->conf->block_len - drbg->conf->ctr_len], drbg->conf->ctr_len, &one, 1);
         } else {
-            add(drbg->V, drbg->conf->block_len, &one, 1);
+            ret = add(drbg->V, drbg->conf->block_len, &one, 1);
         }
+        if (ret != true) goto cleanup;
 
         // temp = temp || Block_Encrypt(key, v)
-        drbg->conf->encrypt(drbg->V, drbg->conf->block_len, drbg->key, drbg->conf->key_len, &temp[offset]);
+        ret = drbg->conf->encrypt(drbg->V, drbg->conf->block_len, drbg->key, drbg->conf->key_len, &temp[offset]);
         offset += drbg->conf->block_len;
+        if (ret != true) goto cleanup;
     }
 
     // temp ^= provided_data
@@ -163,31 +175,36 @@ static bool DRBG_CTR_Update(DRBG_CTR *drbg, const uint8_t *input, uint32_t input
     memcpy(drbg->key, temp, drbg->conf->key_len);
     memcpy(drbg->V, &temp[drbg->conf->key_len], drbg->conf->block_len);
 
-    return true;
+    cleanup:
+    free(temp);
+    return ret;
 }
 
-bool DRBG_CTR_new(DRBG_CTR *drbg, DRBG_CTR_CONF *conf, bool useDerivationFunction) {
+bool DRBG_CTR_new(DRBG_CTR *drbg, DRBG_CTR_CONF *conf, uint8_t useDerivationFunction) {
 
+    uint8_t *v;
+    uint8_t *key;
     // validate config
     if (conf == NULL || conf->encrypt == NULL ||
         conf->block_len == 0 ||
         conf->key_len == 0 ||
         conf->ctr_len < 4 || conf->ctr_len > conf->block_len ||
-        conf->reseed_interval == 0)
+        conf->reseed_interval == 0) {
         return false;
+    }
 
     conf->useDerivationFunction = useDerivationFunction;
     drbg->conf = conf;
 
     /* initialize internal state */
-    uint8_t *v = malloc(conf->block_len);
+    v = malloc(conf->block_len);
     memset(v, 0, conf->block_len);
     drbg->V = v;
-    uint8_t *key = malloc(conf->key_len);
+    key = malloc(conf->key_len);
     memset(key, 0, conf->key_len);
     drbg->key = key;
     drbg->reseed_counter = 0;
-    drbg->prediction_resistance_flag = false;
+    drbg->prediction_resistance_flag = 0;
     return true;
 }
 
@@ -196,63 +213,85 @@ bool DRBG_CTR_instantiate(DRBG_CTR *drbg,
                           const uint8_t *nonce, uint32_t nonce_length,
                           const uint8_t *pstr, uint32_t pstr_length) {
 
+    bool ret = true;
     uint32_t seed_len = drbg->conf->key_len + drbg->conf->block_len;
-    uint8_t seed_mat[seed_len];
+    uint8_t *seed_mat = malloc(seed_len);
     uint8_t current;
-    for (uint32_t i = 0; i < seed_len; ++i) {
+    uint32_t i;
+
+    for (i = 0; i < seed_len; ++i) {
         if (i < pstr_length) current = pstr[i];
         else if (nonce != NULL && pstr_length <= i && i < pstr_length + nonce_length) current = nonce[i];
         else current = 0x00;
-        seed_mat[i] = entropy[i] ^ current;
+        if (i < entropy_length) seed_mat[i] = entropy[i] ^ current;
+        else seed_mat[i] = current;
     }
 
     if (drbg->conf->useDerivationFunction) {
 
         // seed_material = Block_cipher_df(seed_material, seedlen)
-        Block_Cipher_df(drbg, seed_mat, seed_len, seed_mat, seed_len);
+        ret = Block_Cipher_df(drbg, seed_mat, seed_len, seed_mat, seed_len);
+        if (ret != true) goto cleanup;
     }
 
     memset(drbg->key, 0x00, drbg->conf->key_len);
     memset(drbg->V, 0x00, drbg->conf->block_len);
-    DRBG_CTR_Update(drbg, seed_mat, seed_len);
+    ret = DRBG_CTR_Update(drbg, seed_mat, seed_len);
     drbg->reseed_counter = 1;
-    return true;
+
+    cleanup:
+    free(seed_mat);
+    return ret;
 }
 
 bool DRBG_CTR_reseed(DRBG_CTR *drbg,
                      const uint8_t *entropy, uint32_t entropy_length,
                      const uint8_t *add_input, uint32_t add_length) {
 
+    bool ret = true;
     uint32_t seed_len = drbg->conf->key_len + drbg->conf->block_len;
-    uint8_t seed_mat[seed_len];
+    uint8_t *seed_mat = malloc(seed_len);
     uint8_t current;
-    for (uint32_t i = 0; i < seed_len; ++i) {
+    uint32_t i;
+
+    for (i = 0; i < seed_len; ++i) {
         if (i < add_length) current = add_input[i];
         else current = 0x00;
-        seed_mat[i] = entropy[i] ^ current;
+        if (i < entropy_length) seed_mat[i] = entropy[i] ^ current;
+        else seed_mat[i] = current;
     }
 
     if (drbg->conf->useDerivationFunction) {
 
         // seed_material = Block_cipher_df(seed_material, seedlen)
-        Block_Cipher_df(drbg, seed_mat, seed_len, seed_mat, seed_len);
+        ret = Block_Cipher_df(drbg, seed_mat, seed_len, seed_mat, seed_len);
+        if (ret != true) goto cleanup;
     }
 
-    DRBG_CTR_Update(drbg, seed_mat, seed_len);
+    ret = DRBG_CTR_Update(drbg, seed_mat, seed_len);
     drbg->reseed_counter = 1;
-    return true;
+
+    cleanup:
+    free(seed_mat);
+    return ret;
 }
 
 bool DRBG_CTR_generate(DRBG_CTR *drbg,
                        const uint8_t *add_input, uint32_t add_length,
                        uint8_t *output, uint32_t return_length) {
 
+    bool ret;
     uint32_t seed_len = drbg->conf->key_len + drbg->conf->block_len;
-    uint8_t add_temp[seed_len];
+    uint8_t *add_temp = malloc(seed_len);
+    uint8_t *temp = malloc(drbg->conf->block_len);
+    uint8_t one = 1;
+    uint32_t remain;
+
     memset(add_temp, 0x00, seed_len);
     if (add_input != NULL) {
         if (drbg->conf->useDerivationFunction) {
-            Block_Cipher_df(drbg, add_input, add_length, add_temp, seed_len);
+            ret = Block_Cipher_df(drbg, add_input, add_length, add_temp, seed_len);
+            if (ret != true) goto cleanup;
         } else {
             memcpy(add_temp, add_input, add_length);
         }
@@ -260,22 +299,21 @@ bool DRBG_CTR_generate(DRBG_CTR *drbg,
         DRBG_CTR_Update(drbg, add_temp, seed_len);
     }
 
-    uint8_t temp[drbg->conf->block_len];
-    uint8_t one = 1;
-
-    for (uint32_t remain = return_length;; remain -= drbg->conf->block_len) {
+    for (remain = return_length;; remain -= drbg->conf->block_len) {
 
         if (drbg->conf->ctr_len < drbg->conf->block_len) {
-            add(&drbg->V[drbg->conf->block_len - drbg->conf->ctr_len], drbg->conf->ctr_len, &one, 1);
+            ret = add(&drbg->V[drbg->conf->block_len - drbg->conf->ctr_len], drbg->conf->ctr_len, &one, 1);
+            if (ret != true) goto cleanup;
         } else {
-            add(drbg->V, drbg->conf->block_len, &one, 1);
+            ret = add(drbg->V, drbg->conf->block_len, &one, 1);
+            if (ret != true) goto cleanup;
         }
 
         // temp = temp || Block_Encrypt(K, V) till full of return length long bytes
-        if (!drbg->conf->encrypt(
+        if ((ret = drbg->conf->encrypt(
                 drbg->V, drbg->conf->block_len,
-                drbg->key, drbg->conf->key_len, temp))
-            return false;
+                drbg->key, drbg->conf->key_len, temp)) != true)
+            goto cleanup;
 
         // use the smaller one size, hash outputs up to hash_size length
         if (remain > drbg->conf->block_len)
@@ -287,11 +325,13 @@ bool DRBG_CTR_generate(DRBG_CTR *drbg,
         }
     }
 
-    DRBG_CTR_Update(drbg, add_temp, seed_len);
+    ret = DRBG_CTR_Update(drbg, add_temp, seed_len);
     drbg->reseed_counter++;
 
-    return true;
-
+    cleanup:
+    free(add_temp);
+    free(temp);
+    return ret;
 }
 
 bool DRBG_CTR_uninstantiate(DRBG_CTR *drbg) {
