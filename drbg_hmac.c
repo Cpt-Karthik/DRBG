@@ -40,6 +40,9 @@ static bool DRBG_HMAC_Update(DRBG_HMAC *drbg,
 }
 
 bool DRBG_HMAC_new(DRBG_HMAC *drbg, DRBG_HMAC_CONF *conf) {
+
+    uint8_t *v, *key;
+
     // validate config
     if (conf == NULL || conf->hmac == NULL ||
         conf->out_len == 0 ||
@@ -50,10 +53,10 @@ bool DRBG_HMAC_new(DRBG_HMAC *drbg, DRBG_HMAC_CONF *conf) {
     drbg->conf = conf;
 
     /* initialize internal state */
-    uint8_t *v = malloc(conf->out_len);
+    v = malloc(conf->out_len);
     memset(v, 0, conf->out_len);
     drbg->V = v;
-    uint8_t *key = malloc(conf->out_len);
+    key = malloc(conf->out_len);
     memset(key, 0, conf->out_len);
     drbg->Key = key;
     drbg->reseed_counter = 0;
@@ -83,12 +86,14 @@ bool DRBG_HMAC_reseed(DRBG_HMAC *drbg,
 
     // seed_material = entropy_input || additional_input
     uint32_t seed_mat_length = entropy_length + add_length;
-    uint8_t seed_mat[seed_mat_length];
+    uint8_t *seed_mat = malloc(seed_mat_length);
     memcpy(seed_mat, entropy, entropy_length);
     memcpy(&seed_mat[entropy_length], add_input, add_length);
 
     DRBG_HMAC_Update(drbg, entropy, entropy_length, add_input, add_length, NULL, 0);
     drbg->reseed_counter = 1;
+
+    free(seed_mat);
     return true;
 }
 
@@ -96,13 +101,15 @@ bool DRBG_HMAC_generate(DRBG_HMAC *drbg,
                         const uint8_t *add_input, uint32_t add_length,
                         uint8_t *output, uint32_t return_length) {
 
+    uint32_t remain;
+
     if (add_input != NULL && add_length != 0) {
         DRBG_HMAC_Update(drbg, add_input, add_length, NULL, 0, NULL, 0);
     }
 
     // since round is calculated to make output full of data returned
     // we directly calculate remaining bytes to fill up output
-    for (uint32_t remain = return_length;; remain -= drbg->conf->out_len) {
+    for (remain = return_length;; remain -= drbg->conf->out_len) {
 
         // V = hmac(Key, V)
         if (!drbg->conf->hmac(drbg->V, drbg->conf->out_len, NULL, 0, NULL, 0, NULL, 0, NULL, 0,
