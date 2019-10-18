@@ -47,12 +47,14 @@ static bool Block_Cipher_df(DRBG_CTR *drbg, const uint8_t *input, uint32_t input
     uint8_t *key = temp;
     // x = select(temp, keylen + 1, keylen + block_len)
     uint8_t *x = &temp[drbg->conf->key_len];
-
-    if (output_len > MAXIMUM_REQUESTED_BYTES) return false;
-
     slen += drbg->conf->block_len - slen % drbg->conf->block_len;
     iv_s = malloc(drbg->conf->block_len + slen);
     s = &iv_s[drbg->conf->block_len];
+
+    if (output_len > MAXIMUM_REQUESTED_BYTES) {
+        ret = false;
+        goto cleanup;
+    }
 
     // L = len(input_string)
     // N = output_len
