@@ -10,6 +10,9 @@
 int main() {
     DRBG_HMAC drbg;
     DRBG_HMAC_CONF conf;
+    uint8_t ent[ENTROPY_LEN];
+    uint8_t serial[16];
+    uint8_t res[DRBG_LEN];
 
     print_time(1);
     if (!DRBG_HMAC_SHA256_conf(&conf)) {
@@ -24,14 +27,12 @@ int main() {
     }
 
     print_time(3);
-    uint8_t ent[ENTROPY_LEN];
     int result = Get_Entropy(ENTROPY_LEN, false, ent);
     if (result) {
         printf("System call err1 %d", result);
         return result;
     }
 
-    uint8_t serial[16];
     print_time(4);
     if (!DRBG_HMAC_instantiate(&drbg, ent, ENTROPY_LEN, NULL, 0, serial, 16)) {
         printf("Instantiate err");
@@ -39,7 +40,6 @@ int main() {
     }
 
     print_time(5);
-    uint8_t res[DRBG_LEN];
     for (int j = 0; j < 10; ++j) {
         if (!DRBG_HMAC_generate(&drbg, serial, 16, res, DRBG_LEN)) {
             printf("Gen err");
