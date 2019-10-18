@@ -8,10 +8,11 @@
 static bool BCC(DRBG_CTR *drbg, const uint8_t *input, uint32_t input_len,
                 const uint8_t *key, uint32_t key_len, uint8_t *output) {
 
+    bool ret = true;
     // chaining_value = output
     uint32_t offset = 0;
     uint32_t i;
-    uint8_t input_block[drbg->conf->block_len];
+    uint8_t *input_block = malloc(drbg->conf->block_len);
     memset(output, 0x00, drbg->conf->block_len);
 
     while (1) {
@@ -22,8 +23,10 @@ static bool BCC(DRBG_CTR *drbg, const uint8_t *input, uint32_t input_len,
 
             // at this time, offset has the maximum value input_len - 1, or the input length IS NOT n*(block_len)
             if (offset >= input_len) {
-                if (i == drbg->conf->block_len - 1) return true;
-                else return false;
+                if (i != drbg->conf->block_len - 1) {
+                    ret = false;
+                }
+                goto cleanup;
             }
             offset++;
         }
@@ -31,6 +34,10 @@ static bool BCC(DRBG_CTR *drbg, const uint8_t *input, uint32_t input_len,
         // chaining_value = Block_Encrypt(key, input_block)
         drbg->conf->encrypt(input_block, drbg->conf->block_len, key, key_len, output);
     }
+
+    cleanup:
+    free(input_block);
+    return ret;
 }
 
 static bool Block_Cipher_df(DRBG_CTR *drbg, const uint8_t *input, uint32_t input_len, uint8_t *output, uint32_t output_len) {
